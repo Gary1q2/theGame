@@ -1,0 +1,19 @@
+{
+  "name": "servergame",
+  "version": "1.0.0",
+  "description": "awesome game",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.15.3",
+    "socket.io": "^2.0.3"
+    },
+  "engines": {
+    "node": "6.11.0"
+  },  
+  "devDependencies": {},
+  "scripts": {
+    "start": "node app.js"
+  },
+  "author": "",
+  "license": "ISC"
+}
