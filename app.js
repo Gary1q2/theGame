@@ -4,6 +4,8 @@ var db = null;//mongojs('localhost:27017/myGame', ['account','progress']);
 var express = require('express');
 var app = express();
 var serv = require('http').Server(app);
+var profiler = require('v8-profiler');
+var fs = require('fs');
  
 app.get('/',function(req, res) {
     res.sendFile(__dirname + '/client/index.html');
@@ -13,6 +15,9 @@ app.use('/client',express.static(__dirname + '/client'));
 serv.listen(process.env.PORT || 2000);
 console.log("Server started.");
  
+
+var MAP_HEIGHT = 500;
+var MAP_WIDTH = 500;
 
 var SOCKET_LIST = {};
  
@@ -42,20 +47,22 @@ var Entity = function() {
 }
 
 
-var Player = function(id){
+var Player = function(id, name){
     var self = Entity();
     self.id = id;
+    self.name = name;
+    self.playerFace = 0;
     self.number = "" + Math.floor(10 * Math.random());
     self.pressingRight = false;
     self.pressingLeft = false;
     self.pressingUp = false;
     self.pressingDown = false;
     self.pressingAttack = false;
-    self.mouseAngle = 0;
     self.maxSpd = 10;
     self.hp = 10;
     self.hpMax = 10;
     self.score = 0;
+    
     
     var super_update = self.update;
     self.update = function() {
@@ -63,28 +70,28 @@ var Player = function(id){
         super_update();
 
         if (self.pressingAttack == true) {
-            self.shootBullet(self.mouseAngle);
+            self.shootBullet(self.playerFace);
         }
 
     }
 
-    self.shootBullet = function(angle) {
-        var bullet = Bullet(self, angle);
+    self.shootBullet = function(playerFace) {
+        var bullet = Bullet(self, playerFace);
         bullet.x = self.x;
         bullet.y = self.y;
     }
 
     self.updateSpd = function(){
-        if(self.pressingRight)
+        if ((self.pressingRight) && (self.x+20 < MAP_WIDTH))
             self.spdX = self.maxSpd;
-        else if(self.pressingLeft)
+        else if ((self.pressingLeft) && (self.x-20 > 0))
             self.spdX = -self.maxSpd;
         else 
             self.spdX = 0;
 
-        if(self.pressingUp)
+        if ((self.pressingUp) && (self.y-20 > 0))
             self.spdY = -self.maxSpd;
-        else if(self.pressingDown)
+        else if ((self.pressingDown) && (self.y + 20 < MAP_HEIGHT))
             self.spdY = self.maxSpd;
         else 
             self.spdY = 0;
@@ -97,10 +104,13 @@ var Player = function(id){
             id:self.id,
             x:self.x,
             y:self.y,
+            name:self.name,
+            playerFace:self.playerFace,      
             number:self.number,
             hp:self.hp,
             hpMax:self.hpMax,
             score:self.score,
+            
         };
     }
 
@@ -109,8 +119,11 @@ var Player = function(id){
             id:self.id,
             x:self.x,
             y:self.y,
+            name:self.name,
+            playerFace:self.playerFace,
             hp:self.hp,
             score:self.score,
+            
         };
     }
 
@@ -121,22 +134,28 @@ var Player = function(id){
 Player.list = {};
 
 
-Player.onConnect = function(socket) {
-    var player = Player(socket.id);
+Player.onConnect = function(socket, username) {
+    var player = Player(socket.id, username);
 
     socket.on('keyPress',function(data){
-        if(data.inputId === 'left')
+        if(data.inputId === 'left') {
             player.pressingLeft = data.state;
-        else if(data.inputId === 'right')
+            player.playerFace = 3;
+        }
+        else if(data.inputId === 'right') {
             player.pressingRight = data.state;
-        else if(data.inputId === 'up')
+            player.playerFace = 1;
+        }
+        else if(data.inputId === 'up') {
             player.pressingUp = data.state;
-        else if(data.inputId === 'down')
+            player.playerFace = 0;
+        }
+        else if(data.inputId === 'down') {
             player.pressingDown = data.state;
+            player.playerFace = 2;
+        }
         else if(data.inputId === 'attack') 
             player.pressingAttack = data.state;
-        else if(data.inputId === 'mouseAngle')
-            player.mouseAngle = data.state;
     });
 
     socket.emit('init', {
@@ -170,11 +189,22 @@ Player.update = function() {
 }
 
 
-var Bullet = function(parent, angle) {
+var Bullet = function(parent, playerFace) {
     var self = Entity();
     self.id = Math.random();
-    self.spdX = Math.cos(angle/180*Math.PI) * 10;
-    self.spdY = Math.sin(angle/180*Math.PI) * 10;
+
+    self.spdX = 0;
+    self.spdY = 0;
+
+    if (playerFace == 0)
+    	self.spdY = parent.spdY + -10;
+   	else if (playerFace == 1)
+   		self.spdX = parent.spdX + 10;
+   	else if (playerFace == 2)
+   		self.spdY = parent.spdY + 10;
+   	else if (playerFace == 3)
+   		self.spdX = parent.spdX + -10;
+
     self.parent = parent;
 
     self.timer = 0;
@@ -262,39 +292,6 @@ Bullet.getAllInitPack = function() {
     return bullets;
 }
 
-var USERS = {
-    "bob":"asd",
-    "bob2":"bob",
-    "bob3":"ttt",
-}
-
-var isValidPassword = function(data, cb) {
-    return cb(true);/*
-    db.account.find({username:data.username, password:data.password}, function(err, res) {
-        if (res.length > 0) 
-            cb(true);
-        else
-            cb(false);
-    });*/
-}
-
-var isUsernameTaken = function(data, cb) {
-    return cb(false);/*
-    db.account.find({username:data.username}, function(err, res) {
-        if (res.length > 0) 
-            cb(true);
-        else
-            cb(false);
-    });*/
-}
-
-var addUser = function(data, cb) {
-    return cb();/*
-    db.account.insert({username:data.username, password:data.password}, function(err) {
-        cb();
-    });*/
-}
-
 var io = require('socket.io')(serv,{});
 io.sockets.on('connection', function(socket){
 
@@ -304,15 +301,9 @@ io.sockets.on('connection', function(socket){
     SOCKET_LIST[socket.id] = socket;
 
     socket.on('signIn', function(data) {
+    	Player.onConnect(socket, data.username);
+        socket.emit('signInResponse',{success:true});
 
-        isValidPassword(data, function(res) {
-            if (res) {
-                Player.onConnect(socket);
-                socket.emit('signInResponse',{success:true});
-            } else {
-                socket.emit('signInResponse',{success:false});
-            }
-        });
     });
 
     socket.on('signUp', function(data) {
@@ -332,21 +323,7 @@ io.sockets.on('connection', function(socket){
     socket.on('disconnect',function(){
         delete SOCKET_LIST[socket.id];
         Player.onDisconnect(socket);
-    });
-
-    socket.on('sendMsgToServer',function(data){
-        var playerName = ("" + socket.id).slice(2,7);
-        for (var i in SOCKET_LIST) {
-            SOCKET_LIST[i].emit('addToChat', playerName + ': ' + data);
-        }
-    });
-
-    socket.on('evalServer', function(data) {
-        var res = eval(data);
-        socket.emit('evalAnswer', res);
-    });
-    
-   
+    });   
    
 });
  
@@ -372,4 +349,22 @@ setInterval(function() {
     removePack.player = [];
     removePack.bullet = [];
    
-},1000/25);
+}, 1000/25);
+
+
+
+
+var startProfiling = function(duration) {
+    profiler.startProfiling('1', true);
+    setTimeout(function() {
+        var profile1 = profiler.stopProfiling('1');
+
+        profile1.export(function(error, result) {
+            fs.writeFile('./profile.cpuprofile', result);
+            profile1.delete();
+            console.log("Profile saved");
+        });
+    }, duration);
+}
+
+startProfiling(10000);

@@ -1,21 +1,14 @@
 <div id = "signDiv">
     Username: <input id = "signDiv-username" type = "text"></input><br>
-    Password: <input id = "signDiv-password" type = "password"></input>
     <button id = "signDiv-signIn">Sign In</button>
-    <button id = "signDiv-signUp">Sign Up</button>
 </div>
 
 
 <div id = "gameDiv" style = "display:none;">
-    <canvas id="ctx" width="500" height="500" style="border:1px solid #000000;"></canvas>
-
-    <div id = "chat-text" style = "width:500px; height:100px; overflow-y:scroll">
-        <div> Hello! </div>
-    </div>
-
-    <form id = "chat-form">
-        <input id = "chat-input" type = "text" style = "width:500px"></input>
-    </form>
+    <canvas id="ctx" width="500" height="500" style="position:absolute;
+                                left:8px; top:8px; border:1px solid #000000;"></canvas>
+    <canvas id="ctx-ui" width="500" height="500" style="position:absolute; 
+                                    left:8px; top:8px; border:1px solid #000000;"></canvas>
 </div>
 
 <script src="https://cdn.socket.io/socket.io-1.4.5.js"></script>
@@ -30,15 +23,9 @@
     var signDiv = document.getElementById('signDiv');
     var signDivUsername = document.getElementById('signDiv-username');
     var signDivSignIn = document.getElementById('signDiv-signIn');
-    var signDivSignUp = document.getElementById('signDiv-signUp');
-    var signDivPassword = document.getElementById('signDiv-password');
 
     signDivSignIn.onclick = function() {
-        socket.emit('signIn',{username:signDivUsername.value,password:signDivPassword.value});
-    }
-
-    signDivSignUp.onclick = function() {
-        socket.emit('signUp',{username:signDivUsername.value,password:signDivPassword.value});
+        socket.emit('signIn',{username:signDivUsername.value});
     }
 
     socket.on('signInResponse', function(data) {
@@ -50,20 +37,10 @@
         }
     });
 
-    socket.on('signUpResponse', function(data) {
-        if (data.success) {
-            alert("Sign up worked!!");
-        } else {
-            alert("Sign up failed...");
-        }
-    });
-
     //game stuff
-    var chatText = document.getElementById('chat-text');
-    var chatInput = document.getElementById('chat-input');
-    var chatForm = document.getElementById('chat-form');
     var ctx = document.getElementById("ctx").getContext("2d");
-    ctx.font = '30px Arial';
+    var ctxUi = document.getElementById("ctx-ui").getContext("2d");
+    ctxUi.font = ctx.font = '30px Arial';
 
     var Img = {};
     Img.player = new Image();
@@ -76,28 +53,40 @@
     var Player = function(initPack) {
         var self = {};
         self.id = initPack.id;
+        self.name = initPack.name;
+        self.playerFace = initPack.playerFace;
         self.number = initPack.number;
         self.x = initPack.x;
         self.y = initPack.y;
         self.hp = initPack.hp;
         self.hpMax = initPack.hpMax;
         self.score = initPack.score;
+        
 
         self.draw = function() {
 
-            var x = self.x - Player.list[selfId].x + WIDTH/2;
-            var y = self.y - Player.list[selfId].y + HEIGHT/2;
+            var x = self.x;
+            var y = self.y;
 
-            var hpWidth = 30 * self.hp/self.hpMax;
+            var hpWidth = 50 * self.hp/self.hpMax;
+
 
             ctx.fillStyle = 'red';
-            ctx.fillRect(x - hpWidth/2, y - 70, hpWidth, 4);
+            ctx.fillRect(x - 25, y - 70, 50, 9);
 
-            var width = Img.player.width*2;
-            var height = Img.player.height*2;
+            ctx.fillStyle = 'green';
+            ctx.fillRect(x - 25, y - 70, hpWidth, 9);
+
+            var width = Img.player.width;
+            var height = Img.player.height;
 
             ctx.drawImage(Img.player, 0, 0, Img.player.width, Img.player.height, 
                 x-width/2 ,y-height/2,width, height);
+
+            ctx.fillStyle = 'black';
+            ctx.fillText(self.name, x-30, y+70);
+
+            ctx.fillText(self.playerFace, x, y+100);
 
         }
 
@@ -116,8 +105,8 @@
             var width = Img.bullet.width/2;
             var height = Img.bullet.height/2;
 
-            var x = self.x - Player.list[selfId].x + WIDTH/2;
-            var y = self.y - Player.list[selfId].y + HEIGHT/2;
+            var x = self.x;
+            var y = self.y;
 
             ctx.drawImage(Img.bullet, 0, 0, Img.bullet.width, Img.bullet.height,
                 x-width/2, y-height/2, width, height);
@@ -152,10 +141,15 @@
                     p.x = pack.x;
                 if (pack.y !== undefined)
                     p.y = pack.y;
+                if (pack.name !== undefined)
+                    p.name = pack.name;
+                if (pack.playerFace !== undefined)
+                    p.playerFace = pack.playerFace;
                 if (pack.hp !== undefined)
                     p.hp = pack.hp;
                 if (pack.score !== undefined)
                     p.score = pack.score;
+
             }
         }
 
@@ -195,70 +189,44 @@
     }, 40);
 
     var drawMap = function() {
-        var x = WIDTH/2 - Player.list[selfId].x;
-        var y = HEIGHT/2 - Player.list[selfId].y;
-        ctx.drawImage(Img.map, x, y);
+        ctx.drawImage(Img.map, 0, 0);
     }
 
     var drawScore = function() {
-        ctx.fillStyle = 'white';
-        ctx.fillText(Player.list[selfId].score, 0, 30);
+        if (lastScore === Player.list[selfId].score)
+            return;
+        lastScore = Player.list[selfId].score;
+        ctxUi.clearRect(0, 0, 500, 500);
+        ctxUi.fillStyle = 'white';
+        ctxUi.fillText(Player.list[selfId].score, 0, 30);
     }
 
-    socket.on('addToChat', function(data) {
-        chatText.innerHTML += '<div>' + data + '</div>';
-    });
-
-    socket.on('evalAnswer', function(data) {
-        console.log(data);
-    });
-
-    chatForm.onsubmit = function(e) {
-        e.preventDefault();
-        if (chatInput.value[0] == '/')
-            socket.emit('evalServer', chatInput.value.slice(1));
-        else
-            socket.emit('sendMsgToServer', chatInput.value);
-        chatInput.value = '';
-    }
-
-
+    var lastScore = null;
  
     document.onkeydown = function(event){
-        if(event.keyCode === 68)    //d
+        if (event.keyCode === 68)    //d
             socket.emit('keyPress',{inputId:'right',state:true});
-        else if(event.keyCode === 83)   //s
+        else if (event.keyCode === 83)   //s
             socket.emit('keyPress',{inputId:'down',state:true});
-        else if(event.keyCode === 65) //a
+        else if (event.keyCode === 65) //a
             socket.emit('keyPress',{inputId:'left',state:true});
-        else if(event.keyCode === 87) // w
+        else if (event.keyCode === 87) //w
             socket.emit('keyPress',{inputId:'up',state:true});
+        else if (event.keyCode === 32) //space
+            socket.emit('keyPress',{inputId:'attack',state:true});
     }
 
     document.onkeyup = function(event){
-        if(event.keyCode === 68)    //d
+        if (event.keyCode === 68)    //d
             socket.emit('keyPress',{inputId:'right',state:false});
-        else if(event.keyCode === 83)   //s
+        else if (event.keyCode === 83)   //s
             socket.emit('keyPress',{inputId:'down',state:false});
-        else if(event.keyCode === 65) //a
+        else if (event.keyCode === 65) //a
             socket.emit('keyPress',{inputId:'left',state:false});
-        else if(event.keyCode === 87) // w
+        else if (event.keyCode === 87) //w
             socket.emit('keyPress',{inputId:'up',state:false});
-    }
-
-    document.onmousedown = function(event) {
-        socket.emit('keyPress',{inputId:'attack',state:true});
-    }
-
-    document.onmouseup = function(event) {
-        socket.emit('keyPress',{inputId:'attack',state:false});
-    }
-
-    document.onmousemove = function(event) {
-        var x = -250 + event.clientX - 8;
-        var y = -250 + event.clientY - 8;
-        var angle = Math.atan2(y,x) / Math.PI * 180;
-        socket.emit('keyPress',{inputId:'mouseAngle',state:angle});
+        else if (event.keyCode === 32) //space
+            socket.emit('keyPress',{inputId:'attack',state:false});
     }
    
 </script>
